@@ -1,0 +1,159 @@
+    Infrastructure as Code
+    =======================
+    Infrastructure as Code (IaC) means managing and provisioning IT infrastructure using code instead of doing it manually through a web console or CLI.
+    Write code describing the target infrastructure -> Run tool to build it.
+
+#
+
+    Traditional vs IaC
+    -------------------
+    Aspect	            Traditional Setup	                                    Infrastructure as Code
+    -------             ------------------                                      ------------------------
+    How it’s done	    Click in cloud console or run manual commands	        Write configuration files and run them
+    Repeatability	    Hard to repeat manually	                                100% repeatable
+    Versioning	        Manual tracking (spreadsheets, screenshots)	            Code can be versioned in Git
+    Error risk	        High (human mistakes)	                                Low (automated, consistent)
+    Scalability	        Manual scaling	                                        Automated scaling (code can deploy 1 or 100 servers easily)
+
+#
+
+    Key IaC Concepts
+    =================
+    
+    Concept	            Description
+    --------            ------------
+    Declarative	        You define what you want (e.g., 2 EC2 instances); the tool figures out how to get there. Example: Terraform, CloudFormation
+    Imperative 	        You define how to do it step by step (like a script). Example: Ansible
+    Idempotency	        Running the same IaC multiple times gives the same result (no duplicates or drift).
+    State	            IaC tools track the current infrastructure state (e.g., Terraform’s terraform.tfstate).
+    Version Control	    Store IaC code in Git to track changes, review pull requests, and roll back safely.
+
+#
+
+    Types of Infrastructure as Code (IaC) Tools
+    ============================================
+
+    IaC tools are generally categorized by how they define and apply infrastructure changes — mainly into Declarative, Imperative, and Hybrid types.
+
+ 1.Declarative IaC Tools (Provisioning tool)
+ -----------------------
+
+    You define what you want, and the tool figures out how to make it happen. You describe the desired end state (e.g., “I want two EC2 instances in AWS with a load balancer”), and the tool ensures that state exists.
+
+    Key Characteristics:
+
+    Focus on desired outcome, not step-by-step instructions
+    Tools manage state automatically
+    Ideal for cloud infrastructure provisioning
+
+    Examples:
+    Tool	            Description
+    -----               ------------
+    Terraform	        Cloud-agnostic IaC tool by HashiCorp. Uses HCL (HashiCorp Configuration Language) to define infrastructure for AWS, Azure, GCP, etc.
+    AWS CloudFormation	AWS-native declarative IaC tool using JSON or YAML templates.
+    Azure Bicep	        Microsoft’s DSL for declarative Azure IaC (simpler than ARM templates).
+    Google Cloud        Deployment Manager	GCP’s native declarative IaC service using YAML or Python templates.
+    Kubernetes YAML	    Also declarative — defines desired state for pods, services, etc., and Kubernetes reconciles it automatically.
+
+    Pros:
+    -----
+    Consistent, predictable results
+    Automatically handles dependencies
+    Easier to integrate with GitOps workflows
+
+    Cons:
+    -----
+    Less control over execution order
+    Harder to handle complex logic or loops (though Terraform and Bicep handle this better now)
+
+#
+
+ 2.Imperative IaC Tools (Configuration management)
+ -----------------------
+
+    You define how to get to your desired state — step-by-step instructions. You tell the tool exactly what to do and in what order.
+
+    Key Characteristics:
+
+    You control the sequence of operations
+    Often used for configuration management rather than initial provisioning
+    Closer to traditional scripting
+
+    🛠️ Examples:
+    Tool	            Description
+    Ansible	            YAML-based automation tool (by Red Hat). Often used for configuration management and deployments.
+    Chef	            Ruby-based tool that defines infrastructure setup as code (“recipes” and “cookbooks”).
+    Puppet	            Uses its own declarative DSL, but execution is imperative in nature. Great for ongoing configuration enforcement.
+    SaltStack (Salt)	Python-based automation and orchestration tool.
+
+    Pros:
+    -----
+    Precise control over execution
+    Excellent for configuration management (installing software, setting users, etc.)
+    Easy to debug step-by-step
+
+    Cons:
+    -----
+    Harder to scale to large environments
+    Manual sequencing means more maintenance
+    No built-in “desired state” comparison (unless combined with state management tools)
+
+
+ 3.Hybrid (Declarative + Imperative) IaC Tools
+ ----------------------------------------------
+
+    Combine the best of both — declarative structure with imperative scripting.
+    These tools let you define resources declaratively but also use scripting or logic for more complex automation.
+
+    🛠️ Examples:
+    Tool	                                        Description
+    Pulumi	                                        Uses real programming languages (Python, TypeScript, Go, C#) to define infrastructure declaratively but allows imperative logic (loops, conditions).
+    Cloud Development Kit (AWS CDK / Azure CDKTF)	Infrastructure defined using programming languages that compile into declarative templates (like CloudFormation).
+    Terraform with provisioners or modules	        Mostly declarative but can include imperative actions during provisioning.
+
+    Pros:
+    -----
+    Flexibility of programming logic + structure of declarative IaC
+    Easier for developers (code in familiar languages)
+    Powerful for large-scale, complex automation
+
+    Cons:
+    -----
+    Slightly more complex setup
+    Harder to review or audit for non-developers
+    May require more advanced coding knowledge
+
+ 4.Specialized / Supporting Tools (Server Templating)
+ ---------------------------------
+
+    Some tools don’t fit neatly into a category but support or extend IaC workflows.
+
+    Tool	        Purpose	Example Usage
+    -----           ----------------------
+    Packer	        Builds machine images (AMIs, VM images) before Terraform deploys them.	
+    Vagrant	        Creates reproducible local environments for developers using code.	
+    Helm	        Manages Kubernetes deployments as “charts” (templated declarative IaC).	
+    Terragrunt	    Wrapper for Terraform that adds best practices like DRY structure and dependency management.
+    Docker          Idea is same but it applies to containers.
+	
+    Summary Table
+    --------------
+    Type	            Description	Example                                         Tools	                                             Best For
+    Declarative	        Define the desired end state, tool handles the “how”	Terraform, CloudFormation, Bicep, GDM	                 Cloud provisioning
+    Imperative	        Define step-by-step instructions	                    Ansible, Chef, Puppet, Salt	                             Configuration management
+    Hybrid	            Mix of declarative + imperative logic	                Pulumi, AWS CDK, Terraform (with provisioners)	         Complex, logic-heavy automation
+    Supporting Tools	Used alongside IaC for building or packaging	        Packer, Helm, Vagrant, Terragrunt	                     Image building, templating, reuse
+
+#
+
+    Mutable vs Immutable Infrastructure
+    ====================================
+
+    Type	                        Description	                                                                    Example
+    ----                            ------------                                                                    --------
+    Mutable Infrastructure	        You change a running server or system (update configs, install patches, etc.)	SSH into an EC2 instance and run apt-get update
+    Immutable Infrastructure	    You replace the entire system with a new version when changes are needed	    Build a new AMI/Docker image and redeploy it
+
+#
+
+    
