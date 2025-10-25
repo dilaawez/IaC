@@ -1,0 +1,602 @@
+    TERRAFORM
+    ==========
+    It is an open-source infrastructure as code (IaC) tool that is used to define, provision, and manage infrastructure (servers, databases, networks etc.) across multiple cloud providers.
+
+    Write configuration files : Terraform uses HCL (Hashicorp Configuration Language) to write configuration files.
+    Run terraform commands : These commands utilize cofiguration files to create or update infrastructure automatically.
+
+    Terraform takes care of:
+    -------------------------
+        What needs to be created
+        What already exists
+        What needs to be changed
+
+#
+
+    Why Terraform Is So Popular
+    ----------------------------
+    Feature	                    Description
+    Cloud-agnostic	            Works with AWS, Azure, GCP, VMware, Oracle Cloud, etc.
+    Declarative	                Define what you want, Terraform handles how
+    Immutable Infrastructure	Replaces resources instead of patching them
+    Version-controlled	        Configurations can be stored in Git
+    Automation-friendly	        Works easily with CI/CD pipelines
+    Extensible	                Thousands of providers and modules available
+
+#
+
+    Terraform Core Concepts — Overview Diagram
+    ===========================================
+
+    ┌────────────────────────────────────────┐
+    │         Terraform Configuration        │
+    │  (.tf files written in HCL)            │
+    │  - Providers                           │
+    │  - Resources                           │
+    │  - Data Sources                        │
+    │  - Variables                           │
+    │  - Outputs                             │
+    │  - Modules                             │
+    └────────────────────────────────────────┘
+                        │
+                        ▼
+    ┌────────────────────────────────────────┐
+    │        Terraform State (.tfstate)      │
+    │  Keeps track of real infrastructure    │
+    │  → Used for Plan & Apply decisions     │
+    └────────────────────────────────────────┘
+                        │
+                        ▼
+    ┌────────────────────────────────────────┐
+    │        Terraform CLI Workflow          │
+    │  init → plan → apply → output → destroy│
+    └────────────────────────────────────────┘
+
+
+    Terraform Key Concepts
+    =======================
+
+    Concept	        Definition	                                                                Code                                                            Example Code	                                        Real-World Analogy
+    Provider	    A plugin that tells Terraform how to interact with a cloud or service.      provider "<PROVIDER_NAME>" {                                    provider "aws" {                                        Think of a provider as the driver that allows Terraform to talk to a specific cloud (AWS, Azure, GCP).It exposes resources (like EC2, S3, VPC).
+                                                                                                    <PROVIDER_ARGUMENTS>                                            alias  = "west"
+                                                                                                    alias   = "<ALIAS_NAME>"                                        region = "us-west-2"
+                                                                                                    version = "<VERSION_CONSTRAINT>"  # Deprecated                  }
+                                                                                                    }
+                                                                                                            
+
+    Resource	    The basic building block — describes what you want to create or manage      resource "resource_type" "resource_name" {                      resource "aws_instance" "web" {                         Like specifying each item you want in your house — e.g., “1 sofa, 2 chairs”.
+                    (VM, network, bucket, etc.).                                                    # Configuration settings for the resource
+                                                                                                    attribute1 = value1                                             ami                   = "ami-a0cfeed8"
+                                                                                                    attribute2 = value2                                             instance_type         = "t2.micro"
+                                                                                                    # ...                                                           user_data             = file("init-script.sh")
+                                                                                                }                                                                   tags = {
+                                                                                                                                                                        Name = random_pet.name.id
+                                                                                                                                                                    }
+                                                                                                                                                                }
+                    		
+    Data Source	    Lets Terraform read information from existing resources (not managed by     data "provider_type" "name" {                                   data "aws_ami" "example" {                              Like looking up the latest furniture design before buying — you fetch existing data to make decisions.
+                    Terraform) for use in your configurations.	                                    # Configuration options for the data source (filters)	        owners = ["amazon"]
+                                                                                                }                                                                   filter {
+                                                                                                                                                                        name   = "image-id"
+                                                                                                                                                                        values = ["ami-abc123"]
+                                                                                                                                                                    }
+                                                                                                                                                                }
+
+    Variable	    Inputs that make your configuration reusable and dynamic.	                variable "string_type" {	                                    variable "ami" {                                        Like filling out a form where you enter parameters (size, color) before ordering.
+                                                                                                    description = "This is a variable of type string"               type        = string
+                                                                                                    type        = string                                            description = "AMI ID for the EC2 instance"
+                                                                                                    default     = "Default string value for this variable"          default     = "ami-0d26eb3972b7f8c96"
+                                                                                                }                                                               }
+    
+    Output	        Displays specific values after deployment (e.g., IP address, resource ID).	output "<LABEL>" {	                                            output "instance_public_ip" {                           Like getting a receipt showing your order number after checkout.
+                                                                                                    value       = <EXPRESSION>                                      description = "Public IP of EC2 instance"
+                                                                                                    description = "<STRING>"                                        value       = aws_instance.web_server.public_ip
+                                                                                                }                                                               }
+    
+    Module	        A reusable collection of Terraform resources that form a logical unit       module "<LABEL>" {                                              module "webservers" {                                   Like a blueprint you reuse to build identical rooms in different houses.
+                    (e.g., a “VPC module” or “EC2 module”).		                                    source = "<location-of-module-files>"                           source = "../webservers"
+                                                                                                    #...                                                        }
+                                                                                                }
+
+    State File (terraform.tfstate)	Terraform’s database — stores the current real-world        (auto-generated)	                                            (auto-generated)                                        Like a map or inventory of what’s currently deployed so Terraform knows what exists.
+                state of resources it manages.	
+    
+    
+    Backend	        Where the Terraform state file is stored — local by default,                backend "remote" {	                                            terraform {                                             Like choosing whether to store your project files on your local computer or in the cloud (Google Drive).
+                    but can be remote (S3, GCS, Terraform Cloud).	                                organization = "example_corp"                                   backend "s3" {
+                                                                                                    . . .                                                           bucket      = “MY_BUCKET”
+                                                                                                }                                                                   key         = “PATH/TO/KEY”
+                                                                                                                                                                    region      = “MY_REGION”
+                                                                                                                                                                    access_key  = “AWS_ACCESS_KEY”
+                                                                                                                                                                    secret_key  = “AWS_SECRET_KEY”
+                                                                                                                                                                    }
+                                                                                                                                                                }                                                                                                                                                                   
+
+    Provisioner	    Used (sparingly) to run scripts or commands on a resource after             provisioner "remote-exec" {                                     resource "aws_instance" "web" {                         Like adding custom finishing touches after building (e.g., installing curtains).
+                                                                                                    inline = ["sudo apt update"]                                    # ...
+                                                                                                    }	                                                            provisioner "local-exec" {
+                    it’s created.	                                                                                                                                    command = "echo The server's IP address is ${self.private_ip}"
+                                                                                                                                                                    }
+                                                                                                                                                                }                
+
+
+    Dependency Graph	Terraform automatically figures out the order of operations             resource "aws_vpc" "main" {...}                                                                                         Like assembling furniture — Terraform knows it must build the table before placing the lamp on it.
+                        based on resource references.                                               resource "aws_subnet" "sub" {
+                                                                                                    vpc_id = aws_vpc.main.id
+                                                                                                    }	
+                    	
+
+    Plan	        Shows what Terraform will do — a “dry run” before making changes.	        terraform plan	            Like reviewing your shopping list before placing the order.
+    Apply	        Executes the plan — creates, updates, or deletes infrastructure.	        terraform apply	            Like actually ordering the items from your list.
+    Destroy	        Deletes all resources defined in the configuration.	                        terraform destroy	        Like canceling your order and returning everything.
+
+#
+
+    Terraform Workflow Overview (Diagram)
+    ======================================
+
+    ┌────────────────────────────┐
+    │   1. Write Configuration   │
+    │   (.tf files in HCL)       │
+    └─────────────┬──────────────┘
+                    │
+                    ▼
+    ┌────────────────────────────┐
+    │   2. Initialize Project    │
+    │   terraform init           │
+    └─────────────┬──────────────┘
+                    │
+                    ▼
+    ┌────────────────────────────┐
+    │   3. Plan Changes          │
+    │   terraform plan           │
+    └─────────────┬──────────────┘
+                    │
+                    ▼
+    ┌────────────────────────────┐
+    │   4. Apply Configuration   │
+    │   terraform apply          │
+    └─────────────┬──────────────┘
+                    │
+                    ▼
+    ┌────────────────────────────┐
+    │   5. Verify & Output       │
+    │   terraform output         │
+    └─────────────┬──────────────┘
+                    │
+                    ▼
+    ┌────────────────────────────┐
+    │   6. Destroy (optional)    │
+    │   terraform destroy        │
+    └────────────────────────────┘
+
+#
+
+    Step-by-Step Terraform Workflow Table
+    ======================================
+
+    Step	                            Command	            Purpose / Explanation	                                
+    1. Write Configuration	            (no command)	    Define infrastructure in .tf files using HCL (HashiCorp Configuration Language). This is the desired state.	
+    2. Initialize the Working Directory	terraform init	    Downloads the necessary providers (e.g., AWS, Azure) and initializes backend configuration for state management.	
+    3. Validate Configuration	        terraform validate	Checks that your .tf files are syntactically correct and internally consistent.	
+    4. Format Configuration (Optional)	terraform fmt	    Automatically formats all .tf files for readability and consistency.	
+    5. Create an Execution Plan	        terraform plan	    Compares the current state with the configuration and shows the changes that will be made — but doesn’t apply them yet.	
+    6. Apply the Configuration	        terraform apply	    Executes the plan — creates or modifies resources to match your configuration. Prompts for confirmation before applying.	
+    8. Output Values (Optional)	        terraform output	Displays values defined as outputs in your code (like IPs, resource IDs, etc.).	
+    9. Manage State (Optional)	        terraform state     list / terraform state show	View or inspect specific resources tracked in the state file.	
+    10. Destroy Infrastructure	        terraform destroy	Destroys all resources managed by Terraform (useful for test environments).	
+
+#
+
+    Common Terraform Directory Structures
+    ======================================
+    Let’s go through the 4 most widely used structures, what they’re used for, and their pros/cons — with clear diagrams.
+
+
+1. Flat Structure (Basic / Small Projects)
+-------------------------------------------
+
+    Best for: small single-environment projects (like a personal AWS sandbox or proof of concept)
+
+        terraform-project/
+        ├── main.tf
+        ├── variables.tf
+        ├── outputs.tf
+        └── terraform.tfvars
+
+    Description:
+    -------------
+    All resources and configurations live in one directory.
+    Quick to start and simple to manage.
+    Hard to scale — doesn’t separate environments or modules.
+
+    Pros:
+    -----
+    Simple and beginner-friendly
+    Great for demos or single-resource deployments
+
+    Cons:
+    -----
+    No separation of environments
+    Repetition when scaling
+
+
+2. Environment-Based Structure
+-------------------------------
+
+    Best for: teams managing multiple environments (dev, qa, prod) with similar infrastructure.
+
+        terraform/
+        ├── modules/
+        │   ├── network/
+        │   │   ├── main.tf
+        │   │   └── variables.tf
+        │   └── compute/
+        │       ├── main.tf
+        │       └── variables.tf
+        └── envs/
+            ├── dev/
+            │   ├── main.tf
+            │   ├── variables.tf
+            │   └── terraform.tfvars
+            ├── qa/
+            │   ├── main.tf
+            │   ├── variables.tf
+            │   └── terraform.tfvars
+            └── prod/
+                ├── main.tf
+                ├── variables.tf
+                └── terraform.tfvars
+
+    Description:
+    -------------
+    Each environment (dev, qa, prod) uses the same modules but with different variables.
+    Keeps infra consistent across stages.
+    Allows independent state files per environment.
+
+    Pros:
+    -----
+    Clean separation of environments
+    Shared, reusable modules
+    Easier state management
+
+    Cons:
+    -----
+    Slightly more complex structure
+    Need to maintain multiple .tfvars files
+
+
+3. Layered / Component-Based Structure
+---------------------------------------
+
+    Best for: large enterprises where infrastructure is split into independent layers or stacks (network, compute, database, security)
+
+        terraform/
+        ├── global/
+        │   └── s3_backend/
+        ├── network/
+        │   ├── main.tf
+        │   └── variables.tf
+        ├── compute/
+        │   ├── main.tf
+        │   └── variables.tf
+        ├── database/
+        │   ├── main.tf
+        │   └── variables.tf
+        └── security/
+            ├── main.tf
+            └── variables.tf
+
+    Description:
+    ------------
+    Each directory is a self-contained Terraform “layer”.
+    Allows deploying or destroying individual layers independently.
+    Often used with remote state data sharing (e.g., network exports VPC ID to compute).
+
+    Pros:
+    -----
+    Modular and scalable
+    Clear boundaries between infrastructure layers
+    Easier to manage complex org structures
+
+    Cons:
+    -----
+    Requires good coordination between layers
+    Remote state management can get tricky
+
+
+4. Monorepo with Modules + Workspaces (Advanced Setup)
+-------------------------------------------------------
+    
+    Best for: organizations using Terraform Cloud / Enterprise or CI/CD pipelines
+
+        terraform/
+        ├── modules/
+        │   ├── vpc/
+        │   ├── ec2/
+        │   └── rds/
+        └── main/
+            ├── main.tf
+            ├── variables.tf
+            └── backend.tf
+
+    Terraform Workspaces are used for each environment:
+
+        terraform workspace new dev
+        terraform workspace new prod
+        terraform workspace select dev
+
+    Description:
+    ------------
+    Single directory manages all environments using workspaces.
+    Shared code, but environment variables define behavior.
+
+    Pros:
+    -----
+    Single source of truth
+    Great for automation pipelines
+    Minimal duplication
+
+    Cons:
+    -----
+    Harder to manage state manually
+    Workspaces can get confusing in large teams
+
+Bonus: Hybrid Pattern (Best of Both Worlds)
+-------------------------------------------
+    Common in mature DevOps teams
+
+    terraform/
+    ├── modules/
+    │   ├── networking/
+    │   ├── compute/
+    │   └── monitoring/
+    ├── envs/
+    │   ├── dev/
+    │   ├── staging/
+    │   └── prod/
+    └── backend/
+        └── main.tf
+
+    Description:
+    ------------
+    Uses modules for reusable infra patterns.
+    Uses environments for configuration isolation.
+    Can optionally add layers for different domains (network, app, data).
+
+    Best Practice Setup
+    --------------------
+    modules/ → reusable code
+    envs/ → environment-specific settings
+    backend/ → remote state management (e.g., S3 + DynamoDB)
+
+#
+
+    INSTALL TERRAFORM
+    ==================
+
+    https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli
+
+    sudo apt-get update && sudo apt-get install -y gnupg software-properties-common
+    wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
+    gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+    sudo apt update
+    sudo apt-get install terraform
+
+#
+
+    Why Terraform Version Differences Matter
+    ========================================
+
+    Terraform evolves quickly - new versions often:
+
+    Change syntax or language features (HCL updates)
+    Modify provider behavior (like AWS provider)
+    Alter how state is stored or interpreted
+    Update dependency resolution or module handling
+
+    So, if one person uses Terraform 1.3.0 and another uses 1.7.5, the same configuration might plan or apply differently — leading to drift or even failed deployments.
+
+    Common Problems Caused by Version Mismatch
+    -------------------------------------------
+
+    Issue	                        Example	                                                                                    Impact
+    ------                          --------                                                                                    -------
+    State Incompatibility	        Terraform 0.14 state files might not be compatible with Terraform 1.6	                    One user’s “plan” command fails or produces unexpected diffs
+    Syntax Changes	                Older versions don’t support new block types like for_each, depends_on, or dynamic blocks	Configs fail to load on older versions
+    Provider Locking Differences	Terraform ≥0.14 uses .terraform.lock.hcl for provider version locks	                        Teams on older versions might install different provider versions
+    Backend/Remote State Updates	Newer Terraform may add or rename backend arguments	                                        State upload/download fails or corrupts
+    Module Compatibility	        Modules written for Terraform 1.6 may not work on 0.13 (due to dependency handling)	        Module registry errors or missing outputs
+    CLI Behavior Changes	        Command flags like terraform init -upgrade behave differently across versions	            Inconsistent pipeline results
+
+
+    How to Prevent Version Conflicts
+    =================================
+
+1.Pin the Terraform Version in Configuration
+---------------------------------------------
+    
+    Add this block to your Terraform code:
+    
+    terraform {
+        required_version = "~> 1.6.0"
+        }
+
+    Meaning:
+
+        Works with Terraform 1.6.x
+        Fails with Terraform 1.7 or below 1.6
+
+    You can even enforce stricter control:
+
+    terraform {
+        required_version = "= 1.7.5"
+        }
+
+
+2.Pin Provider Versions Too
+----------------------------
+
+    Always lock providers (like AWS, Azure, GCP):
+
+    terraform {
+        required_providers {
+            aws = {
+            source  = "hashicorp/aws"
+            version = "~> 5.0"
+            }
+        }
+    }
+
+    Terraform stores exact versions in .terraform.lock.hcl — commit this file to Git so everyone uses the same provider builds.
+
+
+3.Use Version Managers
+-----------------------
+
+    Use tools like "tfenv" or "asdf" to manage multiple Terraform versions easily.
+
+    Example (with tfenv):
+
+        tfenv install 1.7.5
+        tfenv use 1.7.5
+
+4.Standardize Versions in CI/CD Pipelines
+------------------------------------------
+
+    In Jenkins, GitLab, or GitHub Actions, specify the Terraform version explicitly in the pipeline image or script.
+
+    Example (GitHub Actions):
+
+        - name: Setup Terraform
+          uses: hashicorp/setup-terraform@v3
+          with:
+            terraform_version: 1.7.5
+
+
+5.Avoid Upgrading Mid-Project Without Planning
+-----------------------------------------------
+    If you must upgrade Terraform versions:
+
+    1.Review the Terraform upgrade guides
+    2.Run:
+
+        terraform init -upgrade
+
+    3.Review the "terraform plan" carefully
+    4.Update required_version and re-test before merging
+
+
+    Summary Table
+    --------------
+
+    Problem Area	            Cause	                                        Fix
+    -------------               ------                                          ----
+    Syntax errors	            Old Terraform doesn’t understand new features	Use required_version block
+    State corruption	        State format changed	                        Upgrade carefully using terraform init -upgrade
+    Provider mismatches	        Auto-upgraded provider versions	                Use .terraform.lock.hcl
+    CI/CD inconsistency	        Different runner images	                        Pin Terraform version in pipeline
+    Local developer drift	    Different local versions	                    Use tfenv or asdf
+
+#
+
+    PROVIDERS
+    ==========
+
+    A Terraform provider is a plugin that allows Terraform to interact with a specific cloud platform, service, or API.
+    Each provider defines resources (things you can create/manage) and data sources (things you can read/import)
+
+    Provider Structure in Terraform
+    --------------------------------
+
+    Providers are defined inside a terraform block and configured using a provider block.
+
+    terraform {
+        required_providers {
+            aws = {
+                source  = "hashicorp/aws"
+                version = "~> 5.0"
+            }
+        }
+    }
+
+    provider "aws" {
+        region  = "eu-central-1"
+        profile = "default"
+    }
+
+    Multiple Providers Example
+    ---------------------------
+    
+    You can use more than one provider in a single project (e.g., AWS + Azure).
+
+    terraform {
+        required_providers {
+            aws = {
+                source  = "hashicorp/aws"
+                version = "~> 5.0"
+            }
+            azurerm = {
+                source  = "hashicorp/azurerm"
+                version = "~> 4.0"
+            }
+        }
+        }
+
+        provider "aws" {
+            region = "us-east-1"
+        }
+
+        provider "azurerm" {
+            features {}
+        }
+
+    Provider Aliasing (Multiple Configurations of Same Provider)
+    -------------------------------------------------------------
+
+    If you want to deploy to multiple AWS regions or different accounts, you can use aliases.
+
+    provider "aws" {
+        region = "us-east-1"
+    }
+
+    provider "aws" {
+        alias  = "frankfurt"
+        region = "eu-central-1"
+    }
+
+    resource "aws_instance" "us_server" {
+        ami           = "ami-0abcd1234"
+        instance_type = "t2.micro"
+    }
+
+    resource "aws_instance" "eu_server" {
+        provider      = aws.frankfurt
+        ami           = "ami-0abcd5678"
+        instance_type = "t2.micro"
+    }
+
+    Provider Version Management
+    ---------------------------
+
+    To avoid version drift between teams or CI/CD:
+
+        Pin versions in required_providers
+        Lock dependencies with .terraform.lock.hcl
+
+    Example:
+    terraform {
+        required_providers {
+            aws = {
+                source  = "hashicorp/aws"
+                version = "= 5.33.0"
+            }
+        }
+    }
+
+    Run:
+
+    terraform init
+
+    Terraform will download that exact version and record it in .terraform.lock.hcl.
