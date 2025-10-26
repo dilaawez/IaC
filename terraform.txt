@@ -600,3 +600,487 @@ Bonus: Hybrid Pattern (Best of Both Worlds)
     terraform init
 
     Terraform will download that exact version and record it in .terraform.lock.hcl.
+
+#
+
+    VARIABLES
+    ==========
+
+    A variable in Terraform is an input parameter that allows you to pass dynamic values into your configuration.
+    Instead of hardcoding values (like region names, instance types, or IP ranges), you define variables and reference them throughout your code.
+
+    Why Variables Are Important
+    ----------------------------
+    Purpose	            Benefit
+    --------            --------
+    Avoid hardcoding	You don’t repeat or expose sensitive values in code
+    Reusability	        One configuration works across multiple environments
+    Flexibility	        Modify behavior via .tfvars or CLI
+    Security	        Use environment variables for secrets
+    Automation	        Easy integration with CI/CD pipelines
+
+    Declaring Variables
+    --------------------
+    Variables are declared in a variables.tf file (conventionally), using the variable block.
+    Example:
+
+    variable "region" {
+        description = "AWS region where resources will be deployed"
+        type        = string
+        default     = "eu-central-1"
+    }
+
+    Referencing Variables
+    ----------------------
+    Once declared, you use them anywhere in your Terraform configuration like this:
+
+    provider "aws" {
+        region = var.region
+    }
+
+    Terraform replaces var.region with the actual value (from default or user input).
+
+
+    Variable Types
+    ===============
+    Terraform supports several data types:
+
+    ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    | **Type**                 | **Description**                                                              | **Example Declaration**                                                        | **Example Value**                                                       | **Notes / Rules / Exceptions**                                                                                                                                          |
+    | ------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | **string**               | A sequence of characters. Used for textual data like names, regions, or IDs. | `variable "region" { type = string }`                                          | `"eu-central-1"`                                                        | - (a) Must be enclosed in quotes. (b) Interpolation allowed: `"Instance type is ${var.type}"`.                                                                          |
+    | **number**               | Represents numeric values (integer or float).                                | `variable "instance_count" { type = number }`                                  | `3` or `3.5`                                                            | - (a) Can be used in arithmetic expressions. (b) Terraform auto-converts numeric-looking strings (e.g. `"3"`) **only in legacy HCL1**, not in modern HCL2.              |
+    | **bool**                 | Represents boolean values (`true` or `false`).                               | `variable "enable_logging" { type = bool }`                                    | `true`                                                                  | - (a) Useful for conditional logic (`count = var.enable_logging ? 1 : 0`).                                                                                              |
+    | **list(<type>)**         | Ordered collection of items, all of the same type.                           | `variable "availability_zones" { type = list(string) }`                        | `["eu-central-1a", "eu-central-1b"]`                                    | - (a) Index starts at 0. (b) Access using index: `var.availability_zones[0]`. (c) All elements must match declared type.                                                |
+    | **set(<type>)**          | Unordered collection of unique items of the same type.                       | `variable "tags" { type = set(string) }`                                       | `["app", "backend", "app"]`                                             | - (a) Duplicate items are **automatically removed**. (b) Cannot access by index (no order guaranteed).                                                                  |
+    | **map(<type>)**          | Key-value pairs, all values must be the same type.                           | `variable "instance_tags" { type = map(string) }`                              | `{ Name = "web", Environment = "prod" }`                                | - (a) Access using key: `var.instance_tags["Environment"]`. (b) Keys must be unique strings.                                                                            |
+    | **object({...})**        | Collection of named attributes with specific types.                          | `variable "server" { type = object({ name = string, size = number }) }`        | `{ name = "app-server", size = 2 }`                                     | - (a) Like a struct in programming. (b) All defined attributes are **required** unless default provided.                                                                |
+    | **tuple([<types>])**     | Ordered collection with fixed types per position.                            | `variable "config" { type = tuple([string, number, bool]) }`                   | `["web", 2, true]`                                                      | - (a) Each element can have a different type. (b) Length and type order are fixed.                                                                                         |
+    | **any**                  | Accepts any value of any type.                                               | `variable "dynamic_input" { type = any }`                                      | `"test"` or `[1,2,3]` or `{a="b"}`                                      | - (a) Most flexible but least strict. (b) Use only when you truly need untyped input.<br>- Not recommended for production IaC (reduces validation safety).                 |
+    | **null**                 | Represents an undefined or intentionally empty value.                        | `variable "description" { default = null }`                                    | `null`                                                                  | - (a) Acts as “unset” — Terraform uses default or removes field. (b) Commonly used to override defaults in modules.                                                        |
+    | **complex/nested types** | Combination of types (list of maps, map of objects, etc.).                   | `variable "servers" { type = list(object({ name = string, size = string })) }` | `[ { name = "web", size = "small" }, { name = "db", size = "large" } ]` | - (a) Fully supports deep nesting.<br>- Enforces type safety across structures. (b) Must match structure exactly or validation fails.                                      |
+    ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    Assigning Variable Values
+    ==========================
+    Terraform supports several ways to provide values for variables.
+
+    Method	                    Command/Example	                                When to Use
+    -------                     ----------------                                ------------
+    Default value	            Defined in variable block	                    Simple or constant values
+    Command-line flag	        terraform apply -var="region=us-east-1"	        Quick tests or overrides
+    Variable file (.tfvars)	    terraform apply -var-file="dev.tfvars"	        Common in environments
+    Environment variable	    export TF_VAR_region=us-east-1	                Good for CI/CD
+    Interactive input	        Terraform prompts you if no default is given	Manual runs
+
+    Assigning Values to Variables
+    ------------------------------
+    Terraform supports five main ways to assign variable values.
+    If multiple are used, Terraform follows a specific precedence order (see next section).
+
+    Method	                    How to Use	                                            Example
+    -------                     -----------                                             --------
+    1. Default value	        Defined in variable block	                            default = "eu-central-1"
+    2. .tfvars file	Values      file (e.g. dev.tfvars)	                                region = "us-east-1"
+    3. Command-line flag	    Using -var or -var-file	                                terraform apply -var="region=us-east-1"
+    4. Environment variable	    Prefixed with TF_VAR_	                                export TF_VAR_region=us-east-1
+    5. Interactive prompt	    Terraform asks for value if not provided elsewhere	    region (string):
+
+
+    Automatically Loaded
+    ---------------------
+    Following variable files will be loaded automatically by Terraform, files with any other name will be required in commandline.
+
+    terraform.tfvars
+    terraform.tfvars.json
+    *.auto.tfvars
+    *.auto.tfvars.json
+
+    For eg. 
+    
+    terraform apply                                 // If variables are in a file with name as mentioned above then only run the command and terraform will pick the values.
+    terraform apply -var-file variables.tfvars      // Different filename needs to be mentioned along with the command.    
+
+
+    Variable Definition Precedence
+    -------------------------------
+    Variable precedence (or load order) directly affects how Terraform resolves conflicting values.
+
+    Terraform Variable Definition Precedence (Lowest → Highest Priority)
+    Priority	                    Source	                                                        Description / Behavior
+    Default values	                Values set in the variable block using default	                Used only if no other value is supplied anywhere else.
+    Environment variables	        Environment variables of the form TF_VAR_<variable_name>	    Example: export TF_VAR_region=us-east-1. Overrides defaults in code.
+    terraform.tfvars file	        A file named exactly terraform.tfvars (auto-loaded)	            Automatically loaded if present in the working directory.
+    *.auto.tfvars files	            Any files ending with .auto.tfvars or .auto.tfvars.json	        Auto-loaded alphabetically by filename. Useful for separating environment configs.
+    -var-file flag	                Values passed explicitly via CLI using -var-file	            Example: terraform apply -var-file="dev.tfvars". Overrides all auto-loaded files.
+    -var flag	                    Direct variable values passed through CLI	                    Example: terraform apply -var="region=us-west-2". Has the highest precedence among all file- or env-based inputs.
+    Interactive input	            Terraform will prompt for input if no value is found anywhere	Used only as a last resort — if no default, no tfvars, no CLI, and no env var exist.
+
+
+    Precedence Summary (Bottom → Top Wins)
+    ---------------------------------------
+    Default (lowest)
+    ↓
+    Environment variables
+    ↓
+    terraform.tfvars
+    ↓
+    *.auto.tfvars / *.auto.tfvars.json
+    ↓
+    -var-file (explicit)
+    ↓
+    -var (explicit CLI)
+    ↓
+    Prompted input (if nothing else)
+
+
+    Special Notes / Edge Cases
+    ---------------------------
+    Case	                                            Behavior
+    -----                                               --------
+    If multiple *.auto.tfvars files exist	            Loaded alphabetically — later files can override earlier ones.
+    If both .tfvars and .tfvars.json exist	            Both are loaded, JSON parsed automatically.
+    If variable not found anywhere	                    Terraform will prompt for input unless marked nullable = false.
+    If variable marked sensitive	                    Value hidden from CLI output, but precedence rules stay the same.
+    If variable type mismatched	                        Terraform will fail at plan time, even if value has highest precedence.
+
+
+    REFERENCE EXPRESSIONS
+    ======================
+
+    A reference expression in Terraform is a way to access the value of another object (variable, resource, data source, local, module output, etc.) within your configuration.
+    A reference expression lets you refer to a value that’s defined somewhere else in your Terraform code.
+
+    General Reference Expression Format
+    ------------------------------------
+
+    The general syntax is:
+    <ADDRESS>.<ATTRIBUTE>
+
+    Part	        Meaning
+    <ADDRESS>	    Refers to a specific Terraform object (variable, resource, data, etc.)
+    <ATTRIBUTE>	    Refers to a specific property or output of that object
+
+    Types of Reference Expressions
+    -------------------------------
+    Category	                    Syntax Example	                    Description
+    ---------                       ---------------                     -------------
+    Variable	                    var.region	                        Refers to a user-defined input variable
+    Local value	                    local.app_name	                    Refers to a local value defined in locals {} block
+    Resource	                    aws_instance.web.id	                Refers to an attribute of a resource (e.g., its ID)
+    Data source	                    data.aws_ami.ubuntu.id	            Refers to data fetched from an external source
+    Module output	                module.network.vpc_id	            Refers to output from another module
+    Terraform built-in functions	upper(var.name)	                    Uses function output as a reference
+    Count or For-Each reference	    aws_instance.web[count.index].id	Refers to dynamically created instances
+    Self reference	                self.id (inside resource block)	    Refers to the resource itself (used in provisioners)
+
+    Examples of Reference Expressions
+    ----------------------------------
+ 
+ 1.Referencing Variables
+
+    variable "region" {
+        default = "eu-central-1"
+    }
+
+    provider "aws" {
+        region = var.region
+    }
+
+    → var.region references the value of the variable region.
+
+
+ 2.Referencing Resource Attributes
+
+    resource "aws_vpc" "main" {
+        cidr_block = "10.0.0.0/16"
+    }
+
+    resource "aws_subnet" "web" {
+        vpc_id     = aws_vpc.main.id
+        cidr_block = "10.0.1.0/24"
+    }
+
+    → aws_vpc.main.id references the ID output from the VPC resource.
+
+
+ 3.Referencing Data Source Outputs
+
+    data "aws_ami" "ubuntu" {
+        most_recent = true
+        owners      = ["099720109477"]
+        filter {
+            name   = "name"
+            values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+        }
+    }
+
+    resource "aws_instance" "web" {
+        ami           = data.aws_ami.ubuntu.id
+        instance_type = "t2.micro"
+    }
+
+    → data.aws_ami.ubuntu.id refers to the AMI ID fetched by the data source.
+
+
+ 4.Referencing Module Outputs
+
+    module "network" {
+        source = "./modules/network"
+    }
+
+    resource "aws_instance" "web" {
+        subnet_id = module.network.subnet_id
+    }
+
+    → module.network.subnet_id refers to the output from the network module.
+
+
+ 5.Using Locals
+    locals {
+        app_name = "myapp"
+        env      = "prod"
+    }
+
+    resource "aws_s3_bucket" "app" {
+        bucket = "${local.app_name}-${local.env}-bucket"
+    }
+
+    → local.app_name and local.env are local references that simplify repeated logic.
+
+
+ 6.Using Count or For-Each
+
+    resource "aws_instance" "web" {
+        count         = 2
+        ami           = "ami-12345"
+        instance_type = "t2.micro"
+        tags = {
+            Name = "web-${count.index}"
+        }
+    }
+
+    output "instance_ids" {
+        value = aws_instance.web[*].id
+    }
+
+    → count.index refers to the current index in the loop.
+    → aws_instance.web[*].id collects all IDs from multiple instances.
+
+
+    How Terraform Evaluates References
+    -----------------------------------
+    Terraform builds a dependency graph from reference expressions.
+    It ensures that resources are created in the correct order based on these dependencies.
+
+    For example:
+    aws_subnet.web depends on aws_vpc.main
+
+    Because it references aws_vpc.main.id. Terraform knows it must:
+
+    Create the VPC first
+    Then create the subnet
+
+    This is what makes Terraform declarative — it figures out the correct execution order automatically.
+
+
+    Best Practices for Using Reference Expressions
+    -----------------------------------------------
+    Do’s	                                                                    Don’ts
+    -----                                                                       -------
+    Use explicit references instead of depends_on whenever possible	            Don’t hardcode resource IDs or names
+    Use for_each for clarity when mapping logical resources	                    Avoid overly nested references that reduce readability
+    Use locals for computed values reused across resources	                    Avoid circular references between resources
+    Reference module outputs rather than resources inside the module	        Don’t mix count and for_each in the same block
+
+#
+
+    RESOURCE DEPENDENCY 
+    ====================
+
+    Resource dependency in Terraform means that one resource depends on another resource’s existence, attribute, or output before it can be created or updated.
+    Terraform uses these dependencies to automatically build a dependency graph, which determines the correct order to apply, modify, or destroy resources.
+
+    How Terraform Determines Dependencies
+    --------------------------------------
+    Terraform identifies dependencies in two ways:
+
+    Type	                    Description	                                                                            Example
+    -----                       ------------                                                                            --------
+    Implicit Dependency	        Automatically inferred when one resource references another resource’s attribute.	    subnet uses vpc.id
+    Explicit Dependency	        Manually declared using depends_on meta-argument.	                                    depends_on = [aws_vpc.main]
+
+#
+
+ 1.Implicit Dependency
+ ----------------------
+    Terraform automatically recognizes dependencies when one resource references another’s attributes.
+
+    Example
+    --------
+    
+    resource "aws_vpc" "main" {
+        cidr_block = "10.0.0.0/16"
+    }
+
+    resource "aws_subnet" "web" {
+        vpc_id     = aws_vpc.main.id  # <--- creates an implicit dependency
+        cidr_block = "10.0.1.0/24"
+    }
+
+
+    Explanation:
+
+    The aws_subnet.web resource depends on the aws_vpc.main resource.
+    Terraform automatically knows to create the VPC first, then the subnet.
+    You don’t have to specify depends_on manually here — Terraform figures it out through the reference.
+
+
+ 2.Explicit Dependency
+ ----------------------
+
+    Sometimes you need to force Terraform to wait for one or more resources to finish before starting another — even if no direct attribute reference exists.
+
+    You do that with the depends_on meta-argument.
+
+    Example
+    --------
+    
+    resource "aws_s3_bucket" "app_bucket" {
+        bucket = "my-app-bucket"
+    }
+
+    resource "aws_iam_role" "lambda_exec" {
+        name = "lambda_execution_role"
+    }
+
+    resource "aws_lambda_function" "processor" {
+        function_name = "data-processor"
+        role          = aws_iam_role.lambda_exec.arn
+        handler       = "index.handler"
+        runtime       = "nodejs18.x"
+        filename      = "lambda.zip"
+
+        depends_on = [
+            aws_s3_bucket.app_bucket  # <--- explicit dependency
+        ]
+    }
+
+
+    Explanation:
+
+    The Lambda doesn’t directly reference the bucket.
+    But you still want to make sure the bucket exists first (perhaps it uploads the Lambda code after creation).
+    depends_on explicitly forces Terraform to create the S3 bucket first.
+
+    Dependency Behavior
+    --------------------
+    Action	                        Terraform Behavior
+    ------                          -------------------
+    Apply (terraform apply)	        Creates resources in dependency order
+    Destroy (terraform destroy)	    Destroys in reverse dependency order
+    Plan (terraform plan)	        Displays operations in dependency-resolved sequence
+    Change in dependency	        Terraform refreshes dependent resources automatically
+
+    Best Practices
+    ---------------
+    Do’s	                                                                                            Don’ts
+    -----                                                                                               -------
+    Prefer implicit dependencies — Terraform can detect these automatically	                            Avoid unnecessary depends_on — can make plans slower and more complex
+    Use depends_on only for resources without direct references (e.g., null resources, provisioners)	Don’t create circular dependencies (A → B → A)
+    Visualize dependency graph with terraform graph	                                                    Don’t rely on creation order if dependencies are unclear
+    Keep dependencies clean to simplify lifecycle management	                                        Avoid indirect dependencies through string interpolation ("${...}") unless needed
+
+
+    Commands Related to Dependencies
+    ---------------------------------
+    Command	                Description
+    -------                 ------------
+    terraform plan	        Shows dependency-resolved sequence of resource actions
+    terraform apply	        Executes changes in dependency order
+    terraform destroy	    Destroys resources in reverse dependency order
+    terraform graph	        Outputs a DOT-format dependency graph that can be visualized (e.g., with Graphviz)
+
+    Example:
+
+    terraform graph | dot -Tpng > graph.png
+
+    → Generates a visual diagram of your resource dependencies.
+
+    
+    OUTPUT VARIABLES
+    =================
+
+    An output variable in Terraform is a named value that is returned after Terraform finishes applying a configuration.
+    It’s how Terraform exposes useful information — like IP addresses, ARNs, IDs — to users or other configurations (modules).
+
+    Purpose of Output Variables
+    ----------------------------
+    Purpose	                        Description	                                                                        Example
+    --------                        ------------                                                                        --------
+    Display info after apply	    Show key resource info (like instance IPs) on screen after terraform apply	        Public IP of an EC2 instance
+    Share data between modules	    Pass outputs from one module to another	                                            VPC ID output from a network module
+    Expose values for automation	Let other tools or scripts (like CI/CD pipelines) read important Terraform data	    Read outputs via terraform output -json
+
+
+    Basic Syntax
+    -------------
+    Defined using the output block:
+
+    output "<name>" {
+        value = <expression>
+    }
+
+
+    Outputs and State
+    ------------------
+
+    Terraform stores outputs in the state file (terraform.tfstate).
+    This means outputs reflect the current known values of your resources.
+    If you modify or delete a resource, its outputs update automatically.
+
+    Example — Full Workflow
+    ------------------------
+
+    # main.tf
+
+    provider "aws" {
+        region = "eu-west-1"
+    }
+
+    resource "aws_instance" "example" {
+        ami           = "ami-123456"
+        instance_type = "t2.micro"
+    }
+
+    output "example_instance_id" {
+        description = "The EC2 instance ID"
+        value       = aws_instance.example.id
+    }
+
+    output "example_public_ip" {
+        value = aws_instance.example.public_ip
+    }
+
+
+    Run Commands
+    terraform init
+    terraform apply
+    terraform output
+
+
+    Output:
+
+    example_instance_id = "i-0f24aa0b2b8c2eabc"
+    example_public_ip   = "3.123.45.67"
+
+
+
+    Best Practices
+    ---------------
+    Do’s	                                        Don’ts
+    -----                                           -------
+    Use descriptive names and add description	    Avoid generic names like “output1”
+    Mark secrets as sensitive = true	            Don’t print passwords or keys in plain text
+    Use outputs to connect modules cleanly	        Don’t hardcode values across modules
+    Use terraform output -json for automation       Don’t depend on console output for scripts
