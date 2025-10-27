@@ -1084,3 +1084,9 @@ Bonus: Hybrid Pattern (Best of Both Worlds)
     Mark secrets as sensitive = true	            Don’t print passwords or keys in plain text
     Use outputs to connect modules cleanly	        Don’t hardcode values across modules
     Use terraform output -json for automation       Don’t depend on console output for scripts
+
+
+    TERRAFORM STATE FILE
+    =====================
+
+    
