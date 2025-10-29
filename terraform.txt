@@ -1278,3 +1278,109 @@ Bonus: Hybrid Pattern (Best of Both Worlds)
             terraform init
             terraform plan -out=tfplan
             terraform apply "tfplan"
+
+
+#
+
+    LIFECYCLE RULE
+    ===============
+
+    A lifecycle rule is a special block within a resource definition that controls how Terraform manages the resource’s creation, update, and deletion.
+    It’s mainly used to preserve resources, avoid unintended changes, or force recreation under certain conditions.
+
+    A lifecycle block defines meta-behaviors that affect Terraform’s actions on a resource, it doesn’t change the resource itself, but how Terraform handles 
+    it during apply, plan, and destroy.
+
+    Syntax
+    -------
+
+    resource "aws_instance" "example" {
+        ami           = "ami-123456"
+        instance_type = "t3.micro"
+
+        lifecycle {
+            create_before_destroy = true
+            prevent_destroy       = true
+            ignore_changes        = [tags, user_data]
+        }
+    }
+
+
+    Lifecycle Arguments
+    --------------------
+    Argument	            Description	                                                                                            Example Use Case
+    ---------               ------------                                                                                            ------------------        
+    create_before_destroy	Ensures a new resource is created before the old one is destroyed (useful for zero-downtime updates).	Rolling out a new EC2 instance before terminating the old one.
+    prevent_destroy	        Prevents accidental deletion of the resource. Terraform will throw an error if you try to destroy it.	Protecting production S3 buckets or critical IAM roles.
+    ignore_changes	        Ignores specific attributes from triggering resource replacement or modification during apply.	        Ignoring drift caused by manual changes, like tags or external scripts.
+    replace_triggered_by 	Forces resource replacement when another resource or variable changes.	                                Recreate EC2 instance when an attached security group changes.
+    (Terraform 1.2+)
+
+
+ 1.Prevent accidental deletion
+ ------------------------------
+ Terraform will refuse to destroy this bucket unless you remove or override this rule.
+
+        resource "aws_s3_bucket" "critical_data" {
+            bucket = "company-data-bucket"
+
+            lifecycle {
+                prevent_destroy = true
+            }
+        }
+
+
+ 2.Ignore non-critical attribute changes
+ ---------------------------------------
+ If someone manually updates the tags in AWS, Terraform won’t flag it as drift.
+
+        resource "aws_instance" "web" {
+            ami           = "ami-0abc1234"
+            instance_type = "t3.micro"
+
+            tags = {
+                Name = "WebServer"
+            }
+
+            lifecycle {
+                ignore_changes = [tags]
+            }
+        }
+
+
+ 3.Zero downtime replacement
+ ----------------------------
+ Terraform will first create the new instance, and then destroy the old one — preventing downtime.
+
+        resource "aws_instance" "app" {
+            ami           = "ami-0abc1234"
+            instance_type = "t3.medium"
+
+            lifecycle {
+                create_before_destroy = true
+            }
+        }
+
+
+ 4.Trigger replacement when dependent changes
+ ---------------------------------------------
+ If the app_sg security group changes, Terraform will recreate this instance.
+
+        resource "aws_instance" "app" {
+            ami           = "ami-0abc1234"
+            instance_type = "t3.micro"
+
+            lifecycle {
+                replace_triggered_by = [aws_security_group.app_sg]
+            }
+        }
+
+
+    Best Practices
+    ---------------
+    Use prevent_destroy for "production-critical" resources.
+    Use "create_before_destroy" to avoid downtime.
+    Use "ignore_changes" carefully — it can hide configuration drift.
+    Combine with "depends_on" for explicit dependency management.
+
+
