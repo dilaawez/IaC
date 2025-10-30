@@ -1384,3 +1384,124 @@ Bonus: Hybrid Pattern (Best of Both Worlds)
     Combine with "depends_on" for explicit dependency management.
 
 
+#
+
+    DATA SOURCES 
+    =============
+    Data sources allow you to fetch and use existing resources or information from outside your Terraform configuration — instead of creating new ones.
+
+
+    Syntax Example
+    ---------------
+
+    data "aws_vpc" "selected" {
+        filter {
+            name   = "tag:Name"
+            values = ["production-vpc"]
+        }
+    }
+
+    Then you can reference it like this:
+
+    subnet_ids = data.aws_vpc.selected.id
+
+
+    Common Use Cases
+    Use Case	                                    Example
+    Referencing existing AWS resources	            Fetch an existing VPC, subnet, AMI, or security group
+    Dynamic lookups	                                Get the latest AMI by name or tag
+    Cross-environment references	                Use outputs from another workspace or state
+    Cloud metadata	                                Get region, caller identity, or availability zones
+    External data	                                Pull data from external files, APIs, or scripts
+
+
+    Examples by Provider
+    ---------------------
+
+    AWS
+    ----
+
+    # Get latest Amazon Linux 2 AMI
+
+    data "aws_ami" "amazon_linux" {
+        most_recent = true
+        owners      = ["amazon"]
+
+        filter {
+            name   = "name"
+            values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+        }
+    }
+
+    Azure
+    ------
+    
+    data "azurerm_resource_group" "example" {
+        name = "prod-rg"
+    }
+
+    Google Cloud
+    -------------
+
+    data "google_compute_network" "vpc_network" {
+        name = "main-vpc"
+    }
+
+
+    Referencing Data Sources
+    -------------------------
+
+    Use the syntax:
+
+    data.<PROVIDER>_<TYPE>.<NAME>.<ATTRIBUTE>
+
+
+    Example:
+
+    data.aws_vpc.main.id
+    data.aws_subnet.selected.cidr_block
+
+
+    Example: Using Data Sources Together
+    -------------------------------------
+
+    data "aws_vpc" "selected" {
+        filter {
+            name   = "tag:Environment"
+            values = ["prod"]
+        }
+    }
+
+    data "aws_subnets" "selected" {
+        filter {
+            name   = "vpc-id"
+            values = [data.aws_vpc.selected.id]
+        }
+    }
+
+    resource "aws_instance" "app" {
+        ami           = data.aws_ami.amazon_linux.id
+        subnet_id     = data.aws_subnets.selected.ids[0]
+        instance_type = "t3.micro"
+    }
+
+
+    Notes
+    ======
+    Data sources are read-only — they do not create or modify resources.
+    They are evaluated during plan time, so Terraform must be able to query the source.
+    Avoid using them for frequently changing data (e.g., spot prices, timestamps) as that can cause unwanted re-deployments.
+
+
+    Custom & External Data Sources
+    -------------------------------
+    
+    You can use the external data source to integrate custom scripts:
+
+    data "external" "example" {
+        program = ["python3", "${path.module}/get_data.py"]
+
+        query = {
+            key = "value"
+        }
+    }
