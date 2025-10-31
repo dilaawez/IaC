@@ -1495,7 +1495,7 @@ Bonus: Hybrid Pattern (Best of Both Worlds)
 
     Custom & External Data Sources
     -------------------------------
-    
+
     You can use the external data source to integrate custom scripts:
 
     data "external" "example" {
@@ -1505,3 +1505,351 @@ Bonus: Hybrid Pattern (Best of Both Worlds)
             key = "value"
         }
     }
+
+
+#
+
+    META ARGUMENTS
+    ===============
+
+    Meta-arguments in Terraform are special configuration arguments that control how Terraform manages or interprets resources and modules — not what they create.
+    They allow to influence the lifecycle, dependencies, provider selection, and repetition behavior of Terraform resources.
+
+    Explanation
+    ------------
+    While normal arguments configure the properties of a resource (e.g., instance_type, bucket, name),
+    meta-arguments configure Terraform’s behavior when working with that resource — for example:
+
+    Should Terraform create multiple copies of it? (count, for_each)
+    Should Terraform destroy it before or after creating a new one? (lifecycle)
+    Which provider should handle this resource? (provider)
+    Should it wait for another resource first? (depends_on)
+
+    They are always defined inside a resource or module block.
+
+    Common Terraform Meta-Arguments
+    ================================
+
+    depends_on
+    ==========
+
+    Defines explicit dependencies between resources.
+    Terraform usually detects dependencies automatically (when one resource references another), but use this when the relationship isn’t obvious.
+
+    Example:
+
+    resource "aws_s3_bucket" "logs" {
+        bucket = "my-log-bucket"
+    }
+
+    resource "aws_instance" "web" {
+        ami           = "ami-12345"
+        instance_type = "t2.micro"
+
+        depends_on = [aws_s3_bucket.logs]
+    }
+
+
+    Explanation:
+    ------------
+    Terraform will create the S3 bucket before creating the EC2 instance, even if they don’t reference each other directly.
+
+
+    count
+    ======
+
+    Used to create multiple instances of a resource or module dynamically.
+
+    Example:
+
+    resource "aws_instance" "server" {
+        count         = 3
+        ami           = "ami-045"
+        instance_type = "t2.micro"
+    }
+
+
+    Explanation:
+    ------------
+    Creates 3 identical EC2 instances, indexed as [0], [1], and [2].
+
+    for_each
+    =========
+
+    Creates multiple resources based on a map or set, allowing key-based access and customized attributes.
+
+    Example:
+
+    resource "aws_s3_bucket" "project_buckets" {
+        for_each = {
+            logs    = "my-log-bucket"
+            data    = "my-data-bucket"
+    }
+
+    bucket = each.value
+        tags = {
+            Name = each.key
+        }
+    }
+
+
+    Explanation:
+    ------------
+
+    Creates two buckets, my-log-bucket and my-data-bucket.
+    They can be referenced as aws_s3_bucket.project_buckets["logs"].
+
+
+    provider
+    =========
+
+    Specifies which provider configuration to use when there are multiple providers.
+
+    Example:
+
+    provider "aws" {
+        region = "us-east-1"
+    }
+
+    provider "aws" {
+        alias  = "eu"
+        region = "eu-west-1"
+    }
+
+    resource "aws_instance" "web_eu" {
+        provider = aws.eu
+        ami      = "ami-56789"
+    }
+
+
+    Explanation:
+    ------------
+
+    Tells Terraform to create the instance using the EU provider configuration, not the default one.
+
+
+    lifecycle
+    ==========
+
+    Controls how Terraform manages the creation, update, and destruction of a resource.
+
+    Example:
+
+    resource "aws_instance" "critical_server" {
+        ami           = "ami-12345"
+        instance_type = "t2.medium"
+
+        lifecycle {
+            prevent_destroy        = true
+            create_before_destroy  = true
+            ignore_changes         = [tags]
+        }
+    }
+
+
+    Explanation:
+    -------------
+    prevent_destroy         : Avoids accidental deletion
+    create_before_destroy   : Ensures zero downtime during replacements
+    ignore_changes          : Terraform will ignore tag changes during plan or apply
+
+
+    Exceptions / Limitations
+    -------------------------
+
+    Meta-Argument	        Exceptions / Restrictions
+    -------------           --------------------------
+    depends_on	            Cannot be used inside module outputs or data blocks.
+    count	                Mutually exclusive with for_each — you can’t use both in the same resource.
+    for_each	            Only works with maps or sets of strings.
+    provider	            Not valid inside data blocks unless explicitly supported.
+    lifecycle	            ignore_changes can’t ignore computed-only values (values known only after apply).
+
+
+    Terraform   count vs for_each — Detailed Comparison
+    ====================================================
+
+    Aspect	                        count	                                                            for_each
+    =======                         ======                                                              ==========
+    Purpose	                        Creates multiple instances of a resource based on a numeric count.	Creates multiple instances of a resource based on elements of a map or set.
+    Input type	                    number	                                                            set or map
+    How to reference each instance	count.index (0-based integer)	                                    each.key (for maps) and/or each.value (for maps or sets)
+    When to use	                    When you have a simple list or just need N copies.	                When each instance must have a unique name or key, or when you have structured data (map, set).
+    Creates resources	            resource.name[0], resource.name[1], …	                            resource.name["key1"], resource.name["key2"], …
+    Changes in order	            Sensitive — reorders or destroys resources if list order changes.	Stable — keys prevent unwanted recreation.
+    Best for	                    Indexed resources (e.g. multiple disks, instances).	                Named resources (e.g. per environment, user, or tag).
+
+
+            Examples
+            ---------
+
+        Example 1: Using count with a list
+
+            variable "users" {
+                type    = list(string)
+                default = ["alice", "bob", "charlie"]
+            }
+
+            resource "local_file" "user_file" {
+                count    = length(var.users)
+                filename = "${path.module}/${var.users[count.index]}.txt"
+                content  = "Hello ${var.users[count.index]}"
+            }
+
+
+            Visualization:
+            --------------
+
+            Terraform Plan expands as:
+
+            local_file.user_file[0]
+            ├─ filename = ./alice.txt
+            └─ content  = Hello alice
+
+            local_file.user_file[1]
+            ├─ filename = ./bob.txt
+            └─ content  = Hello bob
+
+            local_file.user_file[2]
+            ├─ filename = ./charlie.txt
+            └─ content  = Hello charlie
+
+
+            Internals:
+
+            Terraform creates a list-like structure.
+            Index count.index runs from 0 to N-1.
+            If you reorder the list (e.g., move “bob” before “alice”), indices change → Terraform will destroy and recreate resources.
+
+            Access syntax:
+
+                var.users[count.index] → gives "alice", "bob", "charlie"
+
+                Resource names →
+
+                    local_file.user_file[0]
+                    local_file.user_file[1]
+                    local_file.user_file[2]
+
+
+        Example 2: Using for_each with a set
+
+            variable "users" {
+                type    = set(string)
+                default = ["alice", "bob", "charlie"]
+            }
+
+            resource "local_file" "user_file" {
+                for_each = var.users
+                filename = "${path.module}/${each.value}.txt"
+                content  = "Hello ${each.value}"
+            }
+
+            Visualization:
+            --------------
+
+            Terraform Plan expands as:
+
+            local_file.user_file["alice"]
+            ├─ filename = ./alice.txt
+            └─ content  = Hello alice
+
+            local_file.user_file["bob"]
+            ├─ filename = ./bob.txt
+            └─ content  = Hello bob
+
+            local_file.user_file["charlie"]
+            ├─ filename = ./charlie.txt
+            └─ content  = Hello charlie
+
+
+            Internals:
+
+            Terraform creates a map-like structure.
+            Each item is identified by a unique key ("alice", "bob", "charlie").
+            Reordering or adding new users does not destroy existing resources — stable mapping.
+
+            Access syntax:
+
+                each.value → "alice", "bob", "charlie"
+
+                Resource names →
+
+                    local_file.user_file["alice"]
+                    local_file.user_file["bob"]
+                    local_file.user_file["charlie"]
+
+
+        Example 3: Using for_each with a map
+
+            variable "user_roles" {
+                type = map(string)
+                default = {
+                    alice   = "admin"
+                    bob     = "developer"
+                    charlie = "tester"
+                }
+            }
+
+            resource "local_file" "user_role" {
+                for_each = var.user_roles
+                filename = "${path.module}/${each.key}.txt"
+                content  = "User ${each.key} has role ${each.value}"
+            }
+
+            Visualization:
+            --------------
+
+            Terraform Plan expands as:
+
+            local_file.user_role["alice"]
+            ├─ filename = ./alice.txt
+            └─ content  = User alice has role admin
+
+            local_file.user_role["bob"]
+            ├─ filename = ./bob.txt
+            └─ content  = User bob has role developer
+
+            local_file.user_role["charlie"]
+            ├─ filename = ./charlie.txt
+            └─ content  = User charlie has role tester
+
+
+            Internals:
+
+            The map keys (each.key) serve as stable identifiers.
+            Removing "bob" only destroys that single resource.
+            Adding "dave" adds one new resource — no impact on others.
+
+            Access syntax:
+
+                each.key → "alice", "bob", "charlie"
+                each.value → "admin", "developer", "tester"
+
+                Resource names →
+
+                    local_file.user_role["alice"]
+                    local_file.user_role["bob"]
+                    local_file.user_role["charlie"]
+
+
+            Notes & Exceptions
+            ===================
+            Point	                Explanation
+            ------                  ------------
+            count reorders easily	If you reorder a list, Terraform may destroy and recreate all resources because indices change.
+            for_each is stable	    Resources are identified by unique keys — no re-creation unless a key is added/removed.
+            You can’t use both	    count and for_each can’t be used in the same resource.
+            Type sensitivity	    for_each requires a map or set — lists must be converted (toset(var.list)).
+            Plan readability	    for_each gives readable resource names (keys), which is often preferred in production.
+
+
+    Important Notes
+    ================
+
+    Meta-arguments don’t affect the resource itself, only Terraform’s behavior.
+    They are available in resource, module, and data blocks (some exceptions).
+    Use for_each for named resources; use count when you just need multiple identical copies.
+    Always use depends_on sparingly — rely on implicit dependencies whenever possible.
+    Be cautious with prevent_destroy in production — it can block necessary replacements.
+    Meta-arguments can make your configuration more powerful, but also more complex — use them purposefully.
