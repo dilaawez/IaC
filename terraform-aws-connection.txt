@@ -1,0 +1,201 @@
+1. Understand How Terraform Authenticates with AWS
+===================================================
+
+    Terraform uses the AWS provider, which looks for credentials in this order (by default):
+
+    Terraform AWS Credential Lookup Order
+    ---------------------------------------
+    Here’s the exact order Terraform follows when looking for AWS credentials, based on the AWS provider’s credential chain.
+
+
+    Priority    Credential Source	            Example / Configuration	                    When to Use	                        Notes / Exceptions
+    --------    -----------------               -----------------------                     -----------                         -------------------
+    1️⃣	         Explicit credentials 	        hcl  	                                    Quick tests or lab setup	        ⚠️ Not recommended — credentials stored in  
+                 in provider block              provider "aws" {                                                                plain text in .tf files and source control. 
+                                                    access_key = "AKIA..."                                                      Should be avoided in production.
+                                                    region = "eu-west-1" 
+                                                    secret_key = "abcd..." 
+                                                    }
+
+    2️⃣	        Environment Variables	        bash  	                                    Local development, pipelines 	    Overrides any file-based credentials. Common 
+                                                export AWS_ACCESS_KEY_ID="AKIA..."          where credentials are injected      in CI/CD environments (e.g., GitLab, Jenkins).
+                                                export AWS_SECRET_ACCESS_KEY="abcd..."      securely
+                                                export AWS_SESSION_TOKEN="xyz..."
+
+    3️⃣	        Shared Credentials File 	    ini                                         Developer machines or shared        This is the most common setup for human users. 
+                (~/.aws/credentials)            [default]                                   environments	                    File created by aws configure.
+                                                aws_access_key_id = AKIA... 
+                                                aws_secret_access_key = abcd... 
+                                                [dev] 
+                                                aws_access_key_id = AKIA... 
+                                                aws_secret_access_key = efgh...
+
+                                                Terraform uses → 
+                                                provider "aws" { 
+                                                    profile = "dev" 
+                                                    }
+
+
+    	
+    4️⃣	        Shared Config File 	            ini 	                                    For specifying roles to assume, 	Terraform merges info from both config + credentials 
+                (~/.aws/config)                 [profile dev]                               regions, or output preferences      files. Config often holds role_arn or MFA setup.
+                                                region = eu-west-1 
+                                                output = json 
+                                                role_arn = arn:aws:iam::1234567890:role/DevRole 
+                                                source_profile = default 
+    
+    
+    5️⃣	        Web Identity Token (OIDC)	    hcl                                         CI/CD pipelines using OIDC 	        Most secure for automation — avoids static credentials. 
+                                                provider "aws" {                            federation for temporary            Used with assume-role-with-web-identity.
+                                                    region = "eu-west-1"                    credentials
+                                                    }
+                                                Used in CI/CD (GitHub Actions, GitLab CI) 
+                                                with environment variable: AWS_WEB_IDENTITY_TOKEN_FILE
+    
+    6️⃣	        EC2 Instance Role / ECS 	    Terraform auto-detects IAM role of 	        Terraform runs inside AWS 	        Safe & automatic — no hardcoded credentials. The role 
+                Task Role                       instance/task when running inside AWS       (EC2, ECS, Lambda, etc.)            permissions control Terraform actions.
+    
+    
+    7️⃣	        Credential Process 	            ini 	                                    Advanced setups or external  	    Allows dynamic retrieval of credentials from a CLI 
+                (Command)                       [profile dynamic]                           identity brokers (Okta,             command or API call.
+                                                credential_process =                        SSO tools, HashiCorp Vault)
+                                                /usr/local/bin/fetch-aws-creds
+    
+    
+    8️⃣	        AWS SSO (Cached Token)	        Terraform uses AWS SSO token cache after 	Organizations using AWS SSO / 	    Terraform uses the cached token for SSO profiles 
+                                                aws sso login                               Identity Center                     (requires AWS CLI v2). Works with named profile.
+
+
+    Resolution Logic (Simplified)
+    ==============================
+
+    Terraform (via AWS SDK) checks in this exact order:
+
+        Provider block → Env vars → Shared credentials file → Shared config file → 
+        OIDC Web Identity → Instance role → Credential process → SSO token
+
+
+    The first valid source found stops the search.
+    If no valid credentials are found → Terraform throws:
+
+        Error: No valid credential sources found for AWS Provider
+
+
+2. Recommended Setups by Use Case
+=================================
+
+    For local development
+    ---------------------
+
+    Best practice — Use AWS CLI profiles.
+
+        Configure the CLI once:
+
+            aws configure --profile dev
+
+
+    Reference it in Terraform:
+
+            provider "aws" {
+                region  = "us-east-1"
+                profile = "dev"
+            }
+
+
+    This avoids hardcoding secrets and reuses your local ~/.aws/credentials.
+
+
+    For CI/CD (e.g., GitLab, Jenkins, GitHub Actions)
+    --------------------------------------------------
+
+    Best practice — Use temporary credentials via environment variables or OIDC.
+
+        Example (GitLab CI):
+
+            variables:
+                AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+                AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+                AWS_DEFAULT_REGION: "us-east-1"
+
+            plan:
+                script:
+                    - terraform init
+                    - terraform plan
+
+
+    Even better — use OpenID Connect (OIDC) to allow Terraform to assume an AWS role without storing credentials.
+
+        provider "aws" {
+            region = "us-east-1"
+            assume_role {
+                role_arn = "arn:aws:iam::123456789012:role/gitlab-terraform-role"
+            }
+        }
+
+
+    When running Terraform inside AWS (e.g., EC2, ECS, Lambda)
+    -----------------------------------------------------------
+
+    Best practice — Assign an IAM Role to the compute resource.
+
+    Terraform automatically picks up the credentials from the metadata service.
+
+        Example:
+
+            EC2 instance with IAM Role "TerraformDeployerRole"
+            Provider config:
+
+                provider "aws" {
+                    region = "eu-central-1"
+                }
+
+
+    No credentials or profiles needed — AWS handles rotation.
+
+
+3. Avoid These Common Mistakes
+===============================
+
+    Hardcoding credentials:
+
+        provider "aws" {
+            access_key = "AKIAxxxxxxxxxx"
+            secret_key = "xxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+
+
+    Never commit credentials in code, Terraform state, or version control.
+
+    Using long-lived IAM user keys in CI/CD
+    → Rotate keys regularly or move to temporary credentials / OIDC-based role assumption.
+
+    Sharing root credentials
+    → Always use dedicated IAM roles with least privilege.
+
+
+4. Advanced Options
+====================
+
+    Use Case	                Method
+    ---------                   -------
+    Multi-account automation	Assume roles dynamically using "assume_role" in provider
+    Multiple providers	        Use "alias" to define multiple AWS providers (e.g., prod/staging)
+    Encrypted backend	        Use "S3 + DynamoDB" backend with KMS encryption and IAM role access
+
+
+    Example: Secure Multi-Account Setup
+    ------------------------------------
+
+        provider "aws" {
+            region = "us-east-1"
+            assume_role {
+                role_arn     = "arn:aws:iam::123456789012:role/TerraformRole"
+                session_name = "terraform-deployment"
+            }
+        }
+
+
+        This lets you:
+
+            Authenticate once with AWS SSO or short-lived credentials.
+            Deploy securely across multiple AWS accounts.
