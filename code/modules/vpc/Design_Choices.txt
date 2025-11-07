@@ -1,0 +1,19 @@
+A hands-on, reusable Terraform module pattern to create a fully dynamic VPC where nothing is hard-coded: AZs, subnet CIDRs, number of public/private/subnet-per-AZ, NAT gateways, tags, flow logs, VPC endpoints, etc.
+You only change variables (or tfvars per environment) — the module computes everything.
+
+I’ll provide:
+
+    Design summary & choices
+    A production-ready module (modules/vpc) with main.tf, variables.tf, outputs.tf, and versions.tf
+    An example root configuration calling the module for dev / prod
+    Guidance: CIDR math, multi-AZ layout, NAT placement, best practices
+
+1 — Design choices (summary)
+
+    No hard-coded AZ names — use data.aws_availability_zones (region-agnostic).
+    CIDR generation automated using cidrsubnet so you only pass a VPC CIDR (e.g., 10.0.0.0/16) and desired subnets per AZ (e.g., 3).
+    Subnets per AZ: public, private (with NAT), isolated (no outbound internet).
+    NAT gateways: optional, controlled by variable (per-AZ or single shared).
+    Use for_each and locals to generate resources dynamically.
+    All names and tags come from variables.
+    Validation blocks ensure safe inputs.

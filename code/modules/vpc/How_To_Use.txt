@@ -1,0 +1,128 @@
+  Root module example (usage)
+  ============================
+  Top-level repo main.tf, backend.tf, prod.tfvars, dev.tfvars.
+
+  main.tf
+  --------
+
+    provider "aws" {
+      region = var.region
+    }
+
+  module "vpc" {
+    source      = "./modules/vpc"
+    name        = "acme"
+    environment = var.environment
+    region      = var.region
+    vpc_cidr    = var.vpc_cidr
+    az_count    = var.az_count
+    subnets_per_az = var.subnets_per_az
+    subnet_mask_bits = var.subnet_mask_bits
+    enable_nat_gateway = var.enable_nat_gateway
+    nat_gateway_per_az = var.nat_gateway_per_az
+    enable_flow_logs = var.enable_flow_logs
+    tags = var.tags
+  }
+
+
+  variables.tf (root)
+  --------------------
+
+    variable "environment" { type = string }
+    variable "region"      { type = string, default = "eu-central-1" }
+    variable "vpc_cidr"    { type = string, default = "10.0.0.0/16" }
+    variable "az_count"    { type = number, default = 2 }
+    variable "subnet_mask_bits" { type = number, default = 8 } # /16 -> /24
+    variable "subnets_per_az" {
+      type = object({
+        public   = number
+        private  = number
+        isolated = number
+      })
+      default = { public=1, private=1, isolated=0 }
+    }
+    variable "enable_nat_gateway" { type = bool, default = true }
+    variable "nat_gateway_per_az" { type = bool, default = true }
+    variable "enable_flow_logs" { type = bool, default = false }
+    variable "tags" { type = map(string), default = {} }
+
+
+  prod.tfvars
+  ------------
+
+    environment = "prod"
+    region = "eu-central-1"
+    vpc_cidr = "10.10.0.0/16"
+    az_count = 3
+    subnets_per_az = { public = 1, private = 2, isolated = 1 }
+    subnet_mask_bits = 8
+    enable_nat_gateway = true
+    nat_gateway_per_az = true
+    enable_flow_logs = true
+    tags = {
+      Owner = "PlatformTeam"
+      Project = "ACME"
+    }
+
+
+  dev.tfvars
+  -----------
+
+    environment = "dev"
+    region = "eu-central-1"
+    vpc_cidr = "10.20.0.0/16"
+    az_count = 2
+    subnets_per_az = { public = 1, private = 1, isolated = 0 }
+    subnet_mask_bits = 8
+    enable_nat_gateway = false
+    nat_gateway_per_az = false
+    enable_flow_logs = false
+    tags = {
+      Owner = "DevTeam"
+      Project = "ACME-Dev"
+    }
+
+
+  How CIDR generation works (explanation)
+  ========================================
+
+    If VPC is 10.0.0.0/16 and subnet_mask_bits = 8, cidrsubnet("10.0.0.0/16", 8, 0) => 10.0.0.0/24
+    netnum increments produce 10.0.1.0/24, 10.0.2.0/24, ... sequentially.
+    Module computes per_az_total_subnets and slices the first az_count * per_az_total_subnets sub-CIDRs — so you never hard-code /24s.
+    If you prefer different sized subnets, tweak subnet_mask_bits (e.g., 4 -> /20 from /16).
+
+
+ Best practices & next steps
+ ============================
+
+  State: Use remote state (S3 + DynamoDB locking) and separate Terraform workspaces or directories per environment.
+  Modules: Keep this as a central controlled module in a private registry; re-use in other repos.
+  Least privilege: Create an automation IAM role with only ec2, vpc, iam:PassRole (for managed instances), and limited S3 access to the state bucket.
+  Testing: Validate the module by applying in dev first. Use terraform validate and terraform plan.
+  Naming & tags: Provide tags from CI variables per environment (owner, cost-center).
+  Security: Narrow the example security group ingress; use centralized NACLs if needed.
+  Optional: Add VPC endpoints (S3, DynamoDB) as a variable-controlled block to reduce NAT costs.
+
+ Commands to run
+ ================
+
+  Initialize and apply for dev:
+
+    terraform init
+    terraform plan -var-file=dev.tfvars
+    terraform apply -var-file=dev.tfvars
+
+
+  For prod (use CI/CD, approval):
+
+    terraform plan -var-file=prod.tfvars
+    terraform apply -var-file=prod.tfvars   # do only after review/approval
+
+
+ Variations & advanced ideas
+ ============================
+
+  Use aws_subnet resource assign_ipv6_address_on_creation and generate IPv6 CIDRs (if needed).
+  Use random_id to create deterministic but non-guessable resource suffixes.
+  Add enable_shared_resources boolean to create centralized NAT/Transit Gateway in Shared Services account using data from remote state (for multi-account landing zone).
+  Use for_each Subnet groups keyed by az-index/type/idx to allow idempotent updates.
